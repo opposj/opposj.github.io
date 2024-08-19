@@ -16,7 +16,7 @@ tags:
 在*dataloader.py* <a href="#ref1">[1]</a>中，可以找到关于`_MultiProcessingDataLoaderIter`的基本工作流程，大致如下图所示（假设worker数量为2）：
 
 <p align="center">
-  <img src="../../assets/images/2024-07-24-pytorch-dataloader-shutdown/loader_flow.excalidraw.png" width=80% />
+  <img src="../assets/images/2024-07-24-pytorch-dataloader-shutdown/loader_flow.excalidraw.png" width=80% />
 </p>
 
 主进程开启两个额外的worker进程和一个pin memory线程。采样器为两个worker进程分配数据的索引，并通过队列将索引传递给worker。拿到索引的worker进程从数据集中读取数据，处理数据，并将处理完成的数据通过`torch.multiprocessing.Queue`传递给pin memory线程。pin memory线程主要执行`Tensor.pin_memory(device)`操作，并将处理好的数据通过`queue.Queue`传递给主进程。
@@ -168,7 +168,7 @@ worker进程 <a href="#ref4">[4]</a> 和pin memory线程 <a href="#ref5">[5]</a>
 *为什么有个cancel_join_thread？* 为了说明这一点，我们需要先了解`multiprocessing.Queue`的内部实现，大致如下图所示：
 
 <p align="center">
-  <img src="../../assets/images/2024-07-24-pytorch-dataloader-shutdown/pipe_flow.excalidraw.png" width=60% />
+  <img src="../assets/images/2024-07-24-pytorch-dataloader-shutdown/pipe_flow.excalidraw.png" width=60% />
 </p>
 
 可以看到，所有写入队列的数据都暂时存进了一个无限长的buffer中，一个额外的feed线程负责将数据从buffer中取出，写入到管道`os.pipe`中。其他进程读取队列时，也是从管道中读取数据。管道通常都有一个容量限制，如果写入的数据过多，且没有及时地读出，将造成管道堵塞或抛出错误（取决于`O_NONBLOCK` <a href="#ref6">[6]</a>），无法继续写入数据。对于`multiprocessing.Queue`来说，此时feed线程将卡死在写入管道的操作上，无法终止。如果不设置`cancel_join_thread`，`multiprocessing.Queue`默认将注册一个用在`_exit_function`中的finalizer，等待feed线程结束：
@@ -381,7 +381,7 @@ error = waitid(P_PID, worker_pid, &infop, WEXITED | WNOHANG | WNOWAIT)
 在*Pytorch*的多进程通信中，`Tensor`是利用共享内存进行传递的 <a href="#ref11">[11]</a>,<a href="#ref12">[12]</a>，大致的通信机制如下图所示：
 
 <p align="center">
-  <img src="../../assets/images/2024-07-24-pytorch-dataloader-shutdown/tensor_comm.excalidraw.png" width=70% />
+  <img src="../assets/images/2024-07-24-pytorch-dataloader-shutdown/tensor_comm.excalidraw.png" width=70% />
 </p>
 
 基于不同的`torch.multiprocessing._sharing_strategy`，进程间传输的内容可以是共享内存对应的文件名（*file_system*），或者共享内存的文件句柄（*file_descriptor*）。对于*file_system*，为了保证创建的临时文件（例如"/dev/shm/tensor"）能够最终被删除，*Pytorch*会开启一个额外的进程，用于回收这些临时文件。对于*file_descriptor*，*Pytorch*的做法是在获得文件句柄后马上删除对应的文件，但保留共享内存，这么做自然就不用担心临时文件的回收问题了。默认情况下，*Pytorch*使用的是*file_descriptor*共享方式，这就带来了一个问题：由于一个*Tensor*对应了一个打开的文件，假如同时传递的*Tensor*数量过多，就会受到打开文件数量上限的限制 <a href="#ref10">[10]</a>，导致后续无法进行*Tensor*的通信。
@@ -414,26 +414,26 @@ except OSError as e:
 
 **Reference**
 
-<a id="ref1">[1]</a>: https://github.com/pytorch/pytorch/blob/e9ebda29d87ce0916ab08c06ab26fd3766a870e5/torch/utils/data/dataloader.py#L686-L991
+<a id="ref1">[1]</a>: [dataloader.py#L686-L991](https://github.com/pytorch/pytorch/blob/e9ebda29d87ce0916ab08c06ab26fd3766a870e5/torch/utils/data/dataloader.py#L686-L991)
 
-<a id="ref2">[2]</a>: https://www.reddit.com/r/cpp_questions/comments/bg0j0k/what_happens_if_the_main_thread_exits_before_all
+<a id="ref2">[2]</a>: [what_happens_if_the_main_thread_exits_before_all](https://www.reddit.com/r/cpp_questions/comments/bg0j0k/what_happens_if_the_main_thread_exits_before_all)
 
-<a id="ref3">[3]</a>: https://chengyihe.wordpress.com/2015/12/26/kernel-signal-how-a-fatal-signal-kills-a-thread-group
+<a id="ref3">[3]</a>: [kernel-signal-how-a-fatal-signal-kills-a-thread-group](https://chengyihe.wordpress.com/2015/12/26/kernel-signal-how-a-fatal-signal-kills-a-thread-group)
 
-<a id="ref4">[4]</a>： https://github.com/pytorch/pytorch/blob/v2.0.1/torch/utils/data/_utils/worker.py#L208-L329
+<a id="ref4">[4]</a>：[worker.py#L208-L329](https://github.com/pytorch/pytorch/blob/v2.0.1/torch/utils/data/_utils/worker.py#L208-L329)
 
-<a id="ref5">[5]</a>: https://github.com/pytorch/pytorch/blob/v2.0.1/torch/utils/data/_utils/pin_memory.py#L16-L51
+<a id="ref5">[5]</a>: [pin_memory.py#L16-L51](https://github.com/pytorch/pytorch/blob/v2.0.1/torch/utils/data/_utils/pin_memory.py#L16-L51)
 
-<a id="ref6">[6]</a>: https://man7.org/linux/man-pages/man7/pipe.7.html
+<a id="ref6">[6]</a>: [pipe.7.html](https://man7.org/linux/man-pages/man7/pipe.7.html)
 
-<a id="ref7">[7]</a>: https://github.com/pytorch/pytorch/pull/71579
+<a id="ref7">[7]</a>: [pytorch/pull/71579](https://github.com/pytorch/pytorch/pull/71579)
 
-<a id="ref8">[8]</a>: https://manpages.ubuntu.com/manpages/trusty/en/man2/wait.2.html
+<a id="ref8">[8]</a>: [wait.2.html](https://manpages.ubuntu.com/manpages/trusty/en/man2/wait.2.html)
 
-<a id="ref9">[9]</a>: https://github.com/pytorch/pytorch/blob/v2.0.1/torch/csrc/DataLoader.cpp#L120-L175
+<a id="ref9">[9]</a>: [DataLoader.cpp#L120-L175](https://github.com/pytorch/pytorch/blob/v2.0.1/torch/csrc/DataLoader.cpp#L120-L175)
 
-<a id="ref10">[10]</a>: https://github.com/pytorch/pytorch/blob/v2.0.1/torch/utils/data/dataloader.py#L1168-L1263
+<a id="ref10">[10]</a>: [dataloader.py#L1168-L1263](https://github.com/pytorch/pytorch/blob/v2.0.1/torch/utils/data/dataloader.py#L1168-L1263)
 
-<a id="ref11">[11]</a>： https://github.com/pytorch/pytorch/wiki/Multiprocessing-Technical-Notes
+<a id="ref11">[11]</a>: [Multiprocessing-Technical-Notes](https://github.com/pytorch/pytorch/wiki/Multiprocessing-Technical-Notes)
 
-<a id="ref12">[12]</a>： https://github.com/pytorch/pytorch/blob/v2.0.1/torch/multiprocessing/reductions.py#L353-L376
+<a id="ref12">[12]</a>：[reductions.py#L353-L376](https://github.com/pytorch/pytorch/blob/v2.0.1/torch/multiprocessing/reductions.py#L353-L376)
