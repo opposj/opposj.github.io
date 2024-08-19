@@ -16,7 +16,7 @@ tags:
 在*dataloader.py* <a href="#ref1">[1]</a>中，可以找到关于`_MultiProcessingDataLoaderIter`的基本工作流程，大致如下图所示（假设worker数量为2）：
 
 <p align="center">
-  <img src="../assets/images/2024-07-24-pytorch-dataloader-shutdown/loader_flow.excalidraw.png" width=80% />
+  <img src="/assets/images/2024-07-24-pytorch-dataloader-shutdown/loader_flow.excalidraw.png" width=80% />
 </p>
 
 主进程开启两个额外的worker进程和一个pin memory线程。采样器为两个worker进程分配数据的索引，并通过队列将索引传递给worker。拿到索引的worker进程从数据集中读取数据，处理数据，并将处理完成的数据通过`torch.multiprocessing.Queue`传递给pin memory线程。pin memory线程主要执行`Tensor.pin_memory(device)`操作，并将处理好的数据通过`queue.Queue`传递给主进程。
@@ -168,7 +168,7 @@ worker进程 <a href="#ref4">[4]</a> 和pin memory线程 <a href="#ref5">[5]</a>
 *为什么有个cancel_join_thread？* 为了说明这一点，我们需要先了解`multiprocessing.Queue`的内部实现，大致如下图所示：
 
 <p align="center">
-  <img src="../assets/images/2024-07-24-pytorch-dataloader-shutdown/pipe_flow.excalidraw.png" width=60% />
+  <img src="/assets/images/2024-07-24-pytorch-dataloader-shutdown/pipe_flow.excalidraw.png" width=60% />
 </p>
 
 可以看到，所有写入队列的数据都暂时存进了一个无限长的buffer中，一个额外的feed线程负责将数据从buffer中取出，写入到管道`os.pipe`中。其他进程读取队列时，也是从管道中读取数据。管道通常都有一个容量限制，如果写入的数据过多，且没有及时地读出，将造成管道堵塞或抛出错误（取决于`O_NONBLOCK` <a href="#ref6">[6]</a>），无法继续写入数据。对于`multiprocessing.Queue`来说，此时feed线程将卡死在写入管道的操作上，无法终止。如果不设置`cancel_join_thread`，`multiprocessing.Queue`默认将注册一个用在`_exit_function`中的finalizer，等待feed线程结束：
@@ -381,7 +381,7 @@ error = waitid(P_PID, worker_pid, &infop, WEXITED | WNOHANG | WNOWAIT)
 在*Pytorch*的多进程通信中，`Tensor`是利用共享内存进行传递的 <a href="#ref11">[11]</a>,<a href="#ref12">[12]</a>，大致的通信机制如下图所示：
 
 <p align="center">
-  <img src="../assets/images/2024-07-24-pytorch-dataloader-shutdown/tensor_comm.excalidraw.png" width=70% />
+  <img src="/assets/images/2024-07-24-pytorch-dataloader-shutdown/tensor_comm.excalidraw.png" width=70% />
 </p>
 
 基于不同的`torch.multiprocessing._sharing_strategy`，进程间传输的内容可以是共享内存对应的文件名（*file_system*），或者共享内存的文件句柄（*file_descriptor*）。对于*file_system*，为了保证创建的临时文件（例如"/dev/shm/tensor"）能够最终被删除，*Pytorch*会开启一个额外的进程，用于回收这些临时文件。对于*file_descriptor*，*Pytorch*的做法是在获得文件句柄后马上删除对应的文件，但保留共享内存，这么做自然就不用担心临时文件的回收问题了。默认情况下，*Pytorch*使用的是*file_descriptor*共享方式，这就带来了一个问题：由于一个*Tensor*对应了一个打开的文件，假如同时传递的*Tensor*数量过多，就会受到打开文件数量上限的限制 <a href="#ref10">[10]</a>，导致后续无法进行*Tensor*的通信。
