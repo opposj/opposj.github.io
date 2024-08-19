@@ -420,7 +420,7 @@ except OSError as e:
 
 <a id="ref3">[3]</a>: [kernel-signal-how-a-fatal-signal-kills-a-thread-group](https://chengyihe.wordpress.com/2015/12/26/kernel-signal-how-a-fatal-signal-kills-a-thread-group)
 
-<a id="ref4">[4]</a>：[worker.py#L208-L329](https://github.com/pytorch/pytorch/blob/v2.0.1/torch/utils/data/_utils/worker.py#L208-L329)
+<a id="ref4">[4]</a>: [worker.py#L208-L329](https://github.com/pytorch/pytorch/blob/v2.0.1/torch/utils/data/_utils/worker.py#L208-L329)
 
 <a id="ref5">[5]</a>: [pin_memory.py#L16-L51](https://github.com/pytorch/pytorch/blob/v2.0.1/torch/utils/data/_utils/pin_memory.py#L16-L51)
 
@@ -436,4 +436,4 @@ except OSError as e:
 
 <a id="ref11">[11]</a>: [Multiprocessing-Technical-Notes](https://github.com/pytorch/pytorch/wiki/Multiprocessing-Technical-Notes)
 
-<a id="ref12">[12]</a>：[reductions.py#L353-L376](https://github.com/pytorch/pytorch/blob/v2.0.1/torch/multiprocessing/reductions.py#L353-L376)
+<a id="ref12">[12]</a>: [reductions.py#L353-L376](https://github.com/pytorch/pytorch/blob/v2.0.1/torch/multiprocessing/reductions.py#L353-L376)
